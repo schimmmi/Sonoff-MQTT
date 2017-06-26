@@ -41,6 +41,7 @@
 * Generic Esp8266
 * CPU 80MHz
 * Flash 1M(64k SPIFFS)
+* Sonoff WiFi-Smart-Switch
 ****************************************/
 
 const char *ssid = "yourSSID";
