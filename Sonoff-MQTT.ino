@@ -44,6 +44,9 @@
 * Sonoff WiFi-Smart-Switch
 ****************************************/
 
+const char *ssid = "yourSSID";
+const char *password = "yourPassword";
+const char *mqtt_server = "your-brocker-server";
 
 
 String Hostname = "Sonoff-";
