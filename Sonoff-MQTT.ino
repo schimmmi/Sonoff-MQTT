@@ -44,30 +44,32 @@
 * Sonoff WiFi-Smart-Switch
 ****************************************/
 
-const char *ssid = "yourSSID";
-const char *password = "yourPassword";
-const char *mqtt_server = "your-brocker-server";
 
 
 String Hostname = "Sonoff-";
 const String Version ="SonoffSchalter V1.1 \n(C) Schimmi 2017";
 
-int altMilli;
-#define ZEin 1
-#define ZAus 0
-int Zustand = ZAus;
+int OldMilli;
+
+typedef enum state_t
+{
+	StateOn = 1,
+	StateOff = 0
+};
+state_t State = StateOff;
+
 #define EE_ADDRESS 10
 
-#define PIN_Relais   12
+#define PIN_RELAIS   12
 #define PIN_LED   13
-#define PIN_TASTER  0
+#define PIN_BUTTON  0
 
 
-#define Relais_Ein HIGH
-#define Relais_Aus LOW
+#define Relais_On HIGH
+#define Relais_Off LOW
 
-#define LED_Ein digitalWrite(PIN_LED, LOW )
-#define LED_Aus digitalWrite(PIN_LED, HIGH)
+#define LED_On digitalWrite(PIN_LED, LOW )
+#define LED_Off digitalWrite(PIN_LED, HIGH)
 
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
@@ -85,7 +87,12 @@ int i;
 int t1;
 int j=0;
 uint8_t MAC_array[6];
-int schritt=0;
+enum 
+{
+	StepOn = 10,
+	StepOff = 0
+};
+int Step =  StepOff;
 
 
 void setup(void) {
@@ -97,32 +104,32 @@ void setup(void) {
   int eeprom_data = EEPROM.read(EE_ADDRESS);
   if (eeprom_data == 0xFF)
   {
-    Zustand = ZAus;
-    Serial.println("Init: Aus");
+    State = StateOff;
+    Serial.println("Init: Off");
   }
   else
   {
-    Zustand = eeprom_data;
+    State = (state_t) eeprom_data;
     Serial.printf("Init: ");
-    if (Zustand == ZEin)
+    if (State == StateOn)
     {
-      Serial.println("EEPROM data Ein");
-      schritt = 10;
+      Serial.println("EEPROM data On");
+      Step = StepOn;
     }
     else
     {
-      Serial.println("EEPROM data Aus");
-      schritt = 0;
+      Serial.println("EEPROM data Off");
+      Step = StepOff;
     }
   }
 
-  pinMode(PIN_Relais,OUTPUT);
-  digitalWrite(PIN_Relais, Zustand==1?Relais_Ein:Relais_Aus);
+  pinMode(PIN_RELAIS,OUTPUT);
+  digitalWrite(PIN_RELAIS, State==StateOn ? Relais_On : Relais_Off);
 
   pinMode(PIN_LED,OUTPUT);
-  LED_Ein;
+  LED_On;
 
-  pinMode(PIN_TASTER, INPUT);
+  pinMode(PIN_BUTTON, INPUT);
 
   WiFi.macAddress(MAC_array);
   Hostname = Hostname + String(MAC_array[4], HEX);
@@ -132,12 +139,8 @@ void setup(void) {
   Serial.println("Initialized");
   WiFi.mode(WIFI_STA);
 
-  //wifiMulti.addAP("schimmi2", "ot3458to"); // hier müssen natürlich die richtigen Angaben rein
-  //wifiMulti.addAP("SSID2", "PW2");
-  //wifiMulti.addAP("SSID3", "PW3");
   WiFi.hostname(Hostname);
 
-  LED_Ein;
   WiFi.begin ( ssid, password );
   Serial.println("Booting");
   Serial.println ( "" );
@@ -148,16 +151,7 @@ void setup(void) {
     delay ( 500 );
     Serial.print ( "." );
   }
-/*  while (wifiMulti.run() != WL_CONNECTED)// Warten auf Verbindung
-  {
-    delay(500);
-    Timeout++;
-    if ((Timeout & 1)>0) LED_Aus;
-    else                 LED_Ein;
-    if (Timeout>100) break;
-    Serial.print(".");
-  } */
-  LED_Aus;
+  LED_Off;
   
   // Port defaults to 8266
   // ArduinoOTA.setPort(8266);
@@ -196,45 +190,45 @@ void setup(void) {
   delay(1000);
 
   httpUpdater.setup(&server);
-  server.on("/", Ereignis_Info);
-  server.on("/Ein", Ereignis_Ein);
-  server.on("/Aus", Ereignis_Aus);
-  server.onNotFound(Ereignis_Info);
-  server.begin();               // Starte den Server
+  server.on("/", GetInfo);
+  server.on("/On", SetOn);
+  server.on("/Off", SetOff);
+  server.onNotFound(GetInfo);
+  server.begin();               // Starte the Server
   
-  client.setServer(mqtt_server, 1883); // starte den client
+  client.setServer(mqtt_server, 1883); // starte the MQTT client
   client.setCallback(callback);
 
-  altMilli = millis();
+  OldMilli = millis();
 }
 
-void Ereignis_Ein()
+void SetOn()
 {
-  digitalWrite(PIN_Relais, Relais_Ein);
-  //LED_Ein;
-  schritt = 10;
-  Zustand = ZEin;
-  EEPROM.write(EE_ADDRESS, Zustand);
+  digitalWrite(PIN_RELAIS, Relais_On);
+  //LED_On;
+  Step= StepOn;
+  State = StateOn;
+  EEPROM.write(EE_ADDRESS, State);
   EEPROM.commit();
 
-  server.send(200, "text/plain", "Ein");
-  Serial.println("Ein ");
+  server.send(200, "text/plain", "On");
+  Serial.println("On ");
 }
 
-void Ereignis_Aus()
+void SetOff()
 {
-  digitalWrite(PIN_Relais, Relais_Aus);
-  //LED_Aus;
-  schritt = 0;
-  Zustand = ZAus;
-  EEPROM.write(EE_ADDRESS, Zustand);
+  digitalWrite(PIN_RELAIS, Relais_Off);
+  //LED_Off;
+  Step = StepOff;
+  State = StateOff;
+  EEPROM.write(EE_ADDRESS, State);
   EEPROM.commit();
 
-  server.send(200, "text/plain", "Aus");
-  Serial.println("Aus ");
+  server.send(200, "text/plain", "Off");
+  Serial.println("Off ");
 }
 
-void Ereignis_Info()
+void GetInfo()
 {
   String T = "";
   T = Version + "\n\n";
@@ -242,16 +236,16 @@ void Ereignis_Info()
   T = T+ "RSSI:     "+String(WiFi.RSSI())+" \n";
   T = T+ "Hostname: "+WiFi.hostname()+" \n";
   T = T+ "Zustand : ";
-  if (Zustand == ZAus)
+  if (State == StateOff)
   {
-    T = T+" Aus \n";
+    T = T+" Off \n";
   }
   else
   {
-    T = T+" Ein \n" ;
+    T = T+" On \n" ;
   }
 
-  T = T+ "/Ein oder /Aus\n";
+  T = T+ "/On or /Off\n";
   server.send(200, "text/plain", T);
 }
 
@@ -269,11 +263,11 @@ void callback(char* topic, byte* payload, unsigned int length)
   // Switch on the relay if an 1 was received as first character
   if ((char)payload[0] == '1') 
   {
-    Ereignis_Ein();   // Turn the relay on
+    SetOn();   // Turn the relay on
   } 
   else 
   {
-    Ereignis_Aus();  // Turn the rely off
+    SetOff();  // Turn the rely off
   }
 }
 
@@ -309,56 +303,54 @@ void loop()
   int mi = millis();
   String T = " ";
   ArduinoOTA.handle();
-  if(digitalRead(PIN_TASTER) == LOW)
+  if(digitalRead(PIN_BUTTON) == LOW)
   {
-    while(digitalRead(PIN_TASTER) == LOW)
+    while(digitalRead(PIN_BUTTON) == LOW)
     {}
-    if(Zustand == ZEin)
+    if(State == StateOn)
     {
-      Ereignis_Aus();
+      SetOff();
     }
     else
     {
-      Ereignis_Ein();
+      SetOn();
     }
   }
-  if((mi-altMilli)>=500)
+  if((mi-OldMilli)>=500)
   {
-    altMilli=mi;
+    OldMilli=mi;
     Serial.print(".");
-    switch (schritt)
+    switch (Step)
     {
-      case 0: // Aus
-        LED_Ein;
-        Serial.print('E');
-        break;
+      case StepOff: 
+		  LED_On;
+          break;
       case 1:
-        LED_Aus;
-       Serial.print('A');
+		  LED_Off;
       case 2:
       case 3:
       case 4:
-        break;
-      case 5: schritt=-1;
-        break;
+		  break;
+      case 5: Step=-1;
+		  break;
 
-      case 10: // Ein
-        LED_Aus;
+      case StepOn: 
+        LED_Off;
         break;
       case 11:
-        LED_Ein;
+        LED_On;
       case 12:
       case 13:
       case 14:
         break;
-      case 15: schritt=9;
+      case 15: Step=9;
         break;
     default:
-      schritt = 0;
+      Step = StepOff;
       break;
     }
-    Serial.println(schritt);
-    schritt++;
+    Serial.println(State);
+    Step++;
   }
   server.handleClient();
 
